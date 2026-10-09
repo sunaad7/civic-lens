@@ -1,0 +1,190 @@
+# CivicLens
+
+A civic complaint platform: citizens report local issues (with photos, a map pin, and voice dictation), an AI triage step categorizes and prioritizes each report, and an admin console manages the queue and drafts official response letters.
+
+```
+┌──────────────────────────┐
+│  React + Vite (Vercel)   │
+│  Citizen app │ Admin UI  │
+│  Leaflet · Web Speech    │
+└────────────┬─────────────┘
+             │ REST (JSON, JWT)
+┌────────────▼─────────────┐
+│  Node/Express (Render)   │
+│  ├─ auth                 │
+│  ├─ complaints           │
+│  ├─ admin                │
+│  └─ ai service ──────────┼──► Vision LLM API
+│                          │      (image → JSON triage,
+│                          │       letter drafting)
+└───────┬──────────┬───────┘
+        │          │
+┌───────▼───────┐ ┌▼──────────────────┐
+│ Postgres +    │ │ Object storage    │
+│ PostGIS       │ │ (Supabase Storage)│
+│ (Supabase)    │ │ complaint images  │
+└───────────────┘ └───────────────────┘
+```
+
+## Stack
+
+| Layer     | Tech |
+|-----------|------|
+| Frontend  | React 19, Vite 8, TypeScript, react-router 8, TanStack Query, Leaflet / react-leaflet, Web Speech API |
+| Backend   | Node.js, Express 5, TypeScript, Zod, Kysely, JWT (access + rotating refresh cookies) |
+| Database  | PostgreSQL + PostGIS (Supabase in production, Docker locally) |
+| Storage   | Supabase Storage (private bucket, signed URLs) — falls back to local disk when unconfigured |
+| AI        | Provider interface with a built-in **stub** (no API key needed) |
+| Tests     | Vitest + Supertest (API), Vitest + Testing Library (web) |
+
+## Repo layout
+
+```
+├── web/          # Citizen + admin UI (Vercel, root directory: web)
+├── api/          # Express API (Render, root directory: api)
+├── migrations/   # (in api/migrations) plain SQL migrations
+├── docker-compose.yml
+├── render.yaml   # Render blueprint for the API
+└── PLAN.md       # the implementation plan this was built from
+```
+
+## Local development
+
+Prerequisites: Node.js 22.19+ (24 LTS recommended), npm 11+, Docker (or any Postgres 15+ with PostGIS).
+
+```bash
+# 1. Start Postgres + PostGIS
+docker compose up -d
+
+# 2. Configure both apps
+cp api/.env.example api/.env          # edit if your DB differs
+cp web/.env.example web/.env          # optional, defaults are fine
+
+# 3. Install dependencies
+npm install
+npm install --prefix api
+npm install --prefix web
+
+# 4. Create schema + seeded admin user
+npm run migrate --prefix api
+npm run seed   --prefix api
+
+# 5. Run both apps (API :3001, web :5173 with proxy)
+npm run dev
+```
+
+Sign in with the seeded admin from `api/.env` (defaults: `admin@civiclens.local` / `admin1234`).
+
+> No Docker? Point `api/.env` `DATABASE_URL` at any Postgres that has the `postgis` and `citext` extensions available, then run the migrate step.
+
+### Scripts
+
+| Where | Command | Does |
+|-------|---------|------|
+| root  | `npm run dev` | API + web concurrently |
+| root  | `npm run build` / `test` / `typecheck` | run across both apps |
+| api   | `npm run dev` | Express with hot reload (tsx watch) |
+| api   | `npm run migrate` / `seed` / `db:types` | database tasks (`db:types` regenerates Kysely types) |
+| api   | `npm test` | Vitest suite (spins migrations on `civiclens_test`) |
+| web   | `npm run dev` / `build` / `test` / `lint` | Vite tasks |
+
+## Environment variables
+
+### `api/.env`
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | ✅ | Postgres connection string (PostGIS required) |
+| `JWT_ACCESS_SECRET` | ✅ | ≥16 chars locally, **≥32 in production** |
+| `JWT_REFRESH_SECRET` | ✅ | ≥16 chars locally, **≥32 in production**, must differ from the access secret |
+| `PORT` | — | default `3001` |
+| `CORS_ORIGINS` | — | comma-separated allowlist, default `http://localhost:5173` |
+| `TRUST_PROXY` | — | reverse-proxy hops to trust for client IP, default `1` in production / `0` otherwise |
+| `COOKIE_SAMESITE` | — | refresh-cookie `SameSite`, default `lax` in dev and `none` in production (needed when the web app is on a different site than the API) |
+| `AI_PROVIDER` | — | `stub` (default). Add new providers in `src/modules/ai/` |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | — | if both set → Supabase Storage, else local disk (`UPLOAD_DIR`) |
+| `SUPABASE_BUCKET` | — | default `complaint-images` (create it as a **private** bucket) |
+| `API_PUBLIC_URL` | prod ✅ | public base URL of this API, used for local-disk image URLs |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | seed | admin account created by `npm run seed` |
+
+### `web/.env`
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_BASE_URL` | `/api` | change only if API is on another origin |
+| `VITE_MAP_CENTER` | `12.9716,77.5946` | initial map center as `lat,lng` |
+
+## API overview
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/register` | — | create account → access token + refresh cookie |
+| POST | `/api/auth/login` | — | sign in |
+| POST | `/api/auth/refresh` | cookie | rotate refresh token, new access token |
+| POST | `/api/auth/logout` | cookie | revoke refresh token |
+| GET  | `/api/auth/me` | bearer | current user |
+| PATCH | `/api/auth/me` | bearer | update name / email / password (email + password changes need `current_password`) |
+| POST | `/api/complaints` | bearer | create complaint (multipart: fields + up to 5 `images`) |
+| GET  | `/api/complaints` | bearer | my complaints — or `?bbox=w,s,e,n[&status=]` for the map |
+| GET  | `/api/complaints/:id` | bearer | detail (owner or admin): images, AI triage, history |
+| GET  | `/api/admin/complaints` | admin | queue, filters `?status=&q=` (`q` matches title, description or complaint ID) |
+| PATCH | `/api/admin/complaints/:id/status` | admin | transition status (validated) + note |
+| POST | `/api/admin/complaints/:id/assign` | admin | assign to an admin user |
+| GET  | `/api/admin/complaints/:id/letter` | admin | draft/cache official letter |
+| GET  | `/api/admin/users` | admin | admin users for assignment |
+| GET  | `/healthz` | — | liveness probe (process + config) |
+| GET  | `/readyz` | — | readiness probe (pings the database) |
+
+Complaint lifecycle: `submitted → triaged → assigned → in_progress → resolved` (with `rejected` exits; the server enforces valid transitions).
+
+## AI triage & letters
+
+The AI layer is a small provider interface (`api/src/modules/ai/provider.ts`):
+
+```ts
+interface AiProvider {
+  triage(input): Promise<TriageResult>       // category, severity 1-5, department, confidence, summary
+  draftLetter(input): Promise<string>
+}
+```
+
+The default `stub` provider is deterministic and offline. To integrate a real vision model:
+
+1. Add your SDK + a provider file (e.g. `openai.ts`) implementing `AiProvider`.
+2. Extend the `AI_PROVIDER` enum in `src/config.ts` and the switch in `src/modules/ai/service.ts`.
+3. Set `AI_PROVIDER` + the API key env var.
+
+Triage runs inline when a complaint is created; the letter is generated on first request and cached on the complaint row.
+
+## Deployment
+
+**Web → Vercel:** create a project with **root directory `web`** (build `npm run build`, output `dist`). `vercel.json` provides SPA rewrites plus security and asset-cache headers. Set `VITE_API_BASE_URL` to the full API URL (e.g. `https://civic-lens-api.onrender.com/api`) when the API is on another origin; the default `/api` requires a same-origin rewrite/proxy.
+
+**API → Render:** easiest is the included blueprint (`render.yaml` — Render discovers it at the repo root). Otherwise create a Node web service with **root directory `api`**, build `npm ci && npm run build`, start `npm run migrate && npm start`, health check `/healthz`. Set `CORS_ORIGINS` to your exact Vercel origin (e.g. `https://civic-lens.vercel.app`, no trailing slash) and `API_PUBLIC_URL` to the Render URL.
+
+Then run the seed once from the Render shell (or leave it to a first deploy): `npm run seed --prefix api`.
+
+**Cross-origin cookies:** when the web app and API live on different sites (Vercel + Render), the refresh cookie must be `SameSite=None; Secure`. This is the production default; the web app already sends `credentials: 'include'` (set `COOKIE_SAMESITE=none` explicitly if you override it). Both origins must be HTTPS.
+
+**Storage:** create a **private** bucket named `complaint-images` in Supabase and set `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` on Render. Without them, images are stored on the (ephemeral) Render disk — fine for demos, not for production.
+
+### Production checklist
+
+- [ ] `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` are ≥32 random chars and different (the API refuses to boot otherwise).
+- [ ] `ADMIN_PASSWORD` is not the default `admin1234`.
+- [ ] `CORS_ORIGINS` lists only your real web origin(s).
+- [ ] Supabase Storage configured with a private bucket (images survive restarts).
+- [ ] `NODE_ENV=production`, `TRUST_PROXY=1`, `COOKIE_SAMESITE=none` on Render.
+- [ ] `VITE_API_BASE_URL` points at the deployed API.
+- [ ] `/healthz` and `/readyz` both return `{ "ok": true }`.
+
+The API also ships with `helmet` security headers, `compression`, and rate limiting (600 req / 15 min per IP overall; 40 / 15 min on `/api/auth`) — all skipped under `NODE_ENV=test`.
+
+## Testing
+
+```bash
+npm test --prefix api    # 39 tests: auth (incl. profile), complaints (incl. geo bbox), admin, health
+npm test --prefix web    # 13 component tests
+```
+
+The API suite migrates a separate `civiclens_test` database automatically (derived from `DATABASE_URL`).
