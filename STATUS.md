@@ -6,7 +6,7 @@ _Last updated: Oct 9, 2026_
 
 CivicLens is a civic complaint platform: residents report local issues (photo, location, text/voice), and city teams triage, assign, and resolve them with a full event/audit trail.
 
-**Stack:** React 19 + Vite 8 + TypeScript + Tailwind v4 (`web/`) · Express 5 + Kysely + Postgres/PostGIS (`api/`) · Supabase Storage for photos · self-rolled JWT auth (15-min access + rotating httpOnly refresh cookie) · Deploy targets: Vercel (frontend) + Render (API).
+**Stack:** React 19 + Vite 8 + TypeScript + Tailwind v4 (`web/`) · Express 5 + Kysely + Postgres/PostGIS (`api/`) · Supabase Storage for photos · self-rolled JWT auth (15-min access + rotating httpOnly refresh cookie) · Deploy targets: Vercel (two projects — `web` frontend + `api` serverless function).
 
 **Excluded by design:** LLM API key wiring — AI adapter runs in stub mode only (`AI_PROVIDER=stub`).
 
@@ -18,7 +18,7 @@ CivicLens is a civic complaint platform: residents report local issues (photo, l
 - End-to-end smoke verified: register → complaint + photo upload → signed URL 200 → bbox query → admin assign/status/letter draft → events persisted.
 - Auth: access/refresh rotation, role-based routing (citizen/admin), httpOnly cookie scoped to `/api/auth`.
 - Admin queue/detail, citizen report/my-complaints/detail pages, status pipeline, audit events, letter drafts (stubbed).
-- Deploy config ready: `render.yaml`, `web/vercel.json`, `docker-compose.yml`, `.env.example` docs.
+- Deploy config ready: `web/vercel.json`, `docker-compose.yml`, `.env.example` docs (API is Vercel zero-config Express).
 
 ## Frontend polish (this session)
 
@@ -51,12 +51,19 @@ Ran the **Aceternity UI skill** and rebuilt the public face of the app:
 - Docs: production checklist in `README.md`; hackathon write-up in `SUBMISSION.md`.
 - `npm audit --omit=dev`: 0 vulnerabilities (api + web).
 
+## Vercel migration (this session)
+
+- Moved the API off Render onto Vercel as a **second project** (`api`, root directory `api`, zero-config Express): `api/src/index.ts` now `export default app` and only starts a listener when `!process.env.VERCEL`.
+- Serverless-safe `pg` pool (`DB_POOL_MAX`, default 3) and pool timeouts; use Supabase transaction pooler (port 6543) for `DATABASE_URL`.
+- Enforced Vercel's 4.5 MB body limit: API caps total image upload at 4 MB; the web client compresses photos to JPEG (`web/src/lib/image.ts`) with a live size guard in `ReportPage`.
+- Removed `render.yaml`; updated README/SUBMISSION deploy docs.
+- Verified: web lint/typecheck + 13/13, api 39/39, both builds, 0 prod vulns.
+
 ## Remaining (user actions)
 
 1. **Rotate secrets** — Supabase DB password + `sb_secret_` service-role key were pasted in chat; rotate both, then update `api/.env` and re-run a migrate sanity check.
-2. **Version control** — repo root is the home directory; run `git init` inside `civic-lens` and make a first commit (nothing is committed yet).
-3. **Deploy** — push to Render (API) and Vercel (web); configs are ready.
-4. Optional: Supabase free-tier projects pause after ~7 days idle (local dev/tests unaffected — they run on Homebrew PostgreSQL 17, port 5433).
+2. **Deploy** — create the `civic-lens-api` Vercel project (root `api`), set env vars, wire the frontend's `VITE_API_BASE_URL`, then verify sign-in end to end.
+3. Optional: Supabase free-tier projects pause after ~7 days idle (local dev/tests unaffected — they run on Homebrew PostgreSQL 17, port 5433).
 
 ## Key files
 
@@ -71,4 +78,5 @@ Ran the **Aceternity UI skill** and rebuilt the public face of the app:
 | `web/src/components/ui/*.tsx`              | Ported Aceternity components                     |
 | `web/src/App.tsx`                          | Route map (`/` landing, `/report` app)           |
 | `web/src/test/setup.ts`                    | Test environment stubs                           |
-| `render.yaml`, `web/vercel.json`           | Deploy configuration                             |
+| `web/vercel.json`                          | Web deploy config (SPA rewrites + headers)       |
+| `web/src/lib/image.ts`                     | Client-side photo compression for uploads        |

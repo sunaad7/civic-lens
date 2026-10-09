@@ -405,6 +405,16 @@
     color: var(--muted);
   }
 
+  .field-hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0;
+  }
+
+  .field-hint-error {
+    color: var(--danger);
+  }
+
   .center {
     text-align: center;
   }

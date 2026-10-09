@@ -12,6 +12,7 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).optional(),
   TRUST_PROXY: z.coerce.number().int().min(0).optional(),
+  DB_POOL_MAX: z.coerce.number().int().positive().default(3),
   AI_PROVIDER: z.enum(['stub']).default('stub'),
   SUPABASE_URL: z.string().default(''),
   SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),

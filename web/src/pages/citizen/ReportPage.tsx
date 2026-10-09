@@ -6,7 +6,14 @@ import { LocationSearch } from '../../components/LocationSearch'
 import { MapPicker, type FlyTarget, type Pin } from '../../components/MapPicker'
 import { VoiceInput } from '../../components/VoiceInput'
 import { apiFetch } from '../../lib/api'
+import { compressImage, MAX_TOTAL_UPLOAD_BYTES } from '../../lib/image'
 import { CATEGORIES, CATEGORY_LABELS, type ComplaintDetail, type GeoResult } from '../../lib/types'
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 const reportSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters').max(200),
@@ -33,6 +40,20 @@ export function ReportPage() {
     setPin(next)
     setFlyTo({ pin: next, tick: Date.now() })
     setLocationLabel((prev) => (prev.trim() ? prev : result.label))
+  }
+
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0)
+  const tooLarge = totalBytes > MAX_TOTAL_UPLOAD_BYTES
+
+  const addFiles = async (incoming: File[]) => {
+    if (!incoming.length) return
+    setError('')
+    const compressed = await Promise.all(incoming.map((file) => compressImage(file)))
+    const next = [...files, ...compressed].slice(0, 5)
+    setFiles(next)
+    if (next.reduce((sum, file) => sum + file.size, 0) > MAX_TOTAL_UPLOAD_BYTES) {
+      setError('Total photo size exceeds 4 MB. Remove a photo or choose smaller ones.')
+    }
   }
 
   const mutation = useMutation({
@@ -168,7 +189,7 @@ export function ReportPage() {
                 capture="environment"
                 onChange={(e) => {
                   const file = e.target.files?.[0]
-                  if (file) setFiles((prev) => [...prev, file])
+                  if (file) void addFiles([file])
                   e.target.value = ''
                 }}
               />
@@ -180,8 +201,7 @@ export function ReportPage() {
                 accept="image/*"
                 multiple
                 onChange={(e) => {
-                  const added = Array.from(e.target.files ?? [])
-                  if (added.length) setFiles((prev) => [...prev, ...added])
+                  void addFiles(Array.from(e.target.files ?? []))
                   e.target.value = ''
                 }}
               />
@@ -191,7 +211,7 @@ export function ReportPage() {
             <ul className="file-list">
               {files.map((f, i) => (
                 <li key={`${f.name}-${i}`}>
-                  {f.name}
+                  {f.name} <span className="muted">({formatBytes(f.size)})</span>
                   <button
                     type="button"
                     className="btn btn-ghost"
@@ -205,7 +225,17 @@ export function ReportPage() {
           )}
         </div>
 
-        <button type="submit" className="btn btn-primary btn-block" disabled={mutation.isPending}>
+        {files.length > 0 && (
+          <p className={tooLarge ? 'field-hint field-hint-error' : 'field-hint'}>
+            {formatBytes(totalBytes)} of 4 MB used
+          </p>
+        )}
+
+        <button
+          type="submit"
+          className="btn btn-primary btn-block"
+          disabled={mutation.isPending || tooLarge}
+        >
           {mutation.isPending ? 'Submitting…' : 'Submit report'}
         </button>
       </form>

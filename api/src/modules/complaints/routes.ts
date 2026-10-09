@@ -14,9 +14,13 @@ import { CATEGORIES, STATUSES, createComplaintSchema, parseBbox } from './schema
 
 const router = Router()
 
+// Vercel Functions reject request bodies larger than 4.5 MB, so we cap the total
+// image payload below that. The web client compresses photos before upload.
+const MAX_TOTAL_UPLOAD_BYTES = 4 * 1024 * 1024
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { files: 5, fileSize: 10 * 1024 * 1024 },
+  limits: { files: 5, fileSize: MAX_TOTAL_UPLOAD_BYTES },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('image/')) cb(null, true)
     else cb(new AppError(400, 'Only image uploads are allowed'))
@@ -47,8 +51,12 @@ router.get('/', async (req, res) => {
 
 router.post('/', upload.array('images', 5), async (req, res) => {
   const user = authUser(req)
-  const input = createComplaintSchema.parse(req.body)
   const files = (req.files as Express.Multer.File[] | undefined) ?? []
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0)
+  if (totalBytes > MAX_TOTAL_UPLOAD_BYTES) {
+    throw new AppError(413, 'Photos are too large — total upload must be under 4 MB.')
+  }
+  const input = createComplaintSchema.parse(req.body)
   res.status(201).json(await createComplaint(user, input, files))
 })
 

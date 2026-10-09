@@ -49,14 +49,14 @@ One platform, two experiences:
 | Database | PostgreSQL + PostGIS (Supabase) |
 | Storage  | Supabase Storage, private bucket with signed URLs (local-disk fallback) |
 | AI       | Provider interface with a deterministic offline stub |
-| Quality  | Vitest + Supertest (API, 36 tests), Vitest + Testing Library (web, 13 tests) |
+| Quality  | Vitest + Supertest (API, 39 tests), Vitest + Testing Library (web, 13 tests) |
 
 ## Production hardening
 
 - `helmet` security headers, `compression`, and per-IP rate limiting
   (600 req / 15 min overall, 40 / 15 min on auth).
 - Cross-site refresh-cookie support (`SameSite=None; Secure`) for
-  Vercel-web + Render-API deployments, with credential-scoped CORS allowlist.
+  split Vercel web + API deployments, with credential-scoped CORS allowlist.
 - Recursive validation at every boundary and Kysely parameterized SQL.
 - Config fail-fast: the API refuses to boot in production with weak, missing, or
   shared JWT secrets.
@@ -69,7 +69,7 @@ One platform, two experiences:
 
 - **Source code:** https://github.com/sunaad7/civic-lens
 - **Live app:** _deployment in progress (Vercel)_
-- **API health:** _deployment in progress (Render)_
+- **API health:** _deployment in progress (Vercel)_
 - **Demo video:** _coming soon_
 - **Admin demo:** seeded admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`
 

@@ -10,7 +10,7 @@ A civic complaint platform: citizens report local issues (with photos, a map pin
 └────────────┬─────────────┘
              │ REST (JSON, JWT)
 ┌────────────▼─────────────┐
-│  Node/Express (Render)   │
+│  Node/Express (Vercel)   │
 │  ├─ auth                 │
 │  ├─ complaints           │
 │  ├─ admin                │
@@ -41,10 +41,9 @@ A civic complaint platform: citizens report local issues (with photos, a map pin
 
 ```
 ├── web/          # Citizen + admin UI (Vercel, root directory: web)
-├── api/          # Express API (Render, root directory: api)
+├── api/          # Express API (Vercel, root directory: api — also runs as a long-lived server)
 ├── migrations/   # (in api/migrations) plain SQL migrations
 ├── docker-compose.yml
-├── render.yaml   # Render blueprint for the API
 └── PLAN.md       # the implementation plan this was built from
 ```
 
@@ -158,15 +157,17 @@ Triage runs inline when a complaint is created; the letter is generated on first
 
 ## Deployment
 
-**Web → Vercel:** create a project with **root directory `web`** (build `npm run build`, output `dist`). `vercel.json` provides SPA rewrites plus security and asset-cache headers. Set `VITE_API_BASE_URL` to the full API URL (e.g. `https://civic-lens-api.onrender.com/api`) when the API is on another origin; the default `/api` requires a same-origin rewrite/proxy.
+Both apps deploy to Vercel as **two projects** from this one repo. The API runs as a serverless function (Express is auto-detected via `api/src/index.ts`); the same entry still starts a long-lived listener with graceful shutdown when run locally, in Docker, or on any Node host.
 
-**API → Render:** easiest is the included blueprint (`render.yaml` — Render discovers it at the repo root). Otherwise create a Node web service with **root directory `api`**, build `npm ci && npm run build`, start `npm run migrate && npm start`, health check `/healthz`. Set `CORS_ORIGINS` to your exact Vercel origin (e.g. `https://civic-lens.vercel.app`, no trailing slash) and `API_PUBLIC_URL` to the Render URL.
+**Web → Vercel:** new project with **root directory `web`** (build `npm run build`, output `dist`). `web/vercel.json` provides SPA rewrites plus security and asset-cache headers. Set `VITE_API_BASE_URL` to the deployed API URL including the `/api` suffix (e.g. `https://civic-lens-api.vercel.app/api`); the default `/api` requires a same-origin rewrite/proxy.
 
-Then run the seed once from the Render shell (or leave it to a first deploy): `npm run seed --prefix api`.
+**API → Vercel:** new project with **root directory `api`** (no build command needed — Vercel builds the Express app automatically). Set the environment variables below, including `CORS_ORIGINS` (exact web origin, e.g. `https://civic-lens.vercel.app`, no trailing slash, comma-separated for multiple) and `API_PUBLIC_URL` (the API's own URL). Run migrations and the seed **locally** against the same `DATABASE_URL` before/after deploy: `npm run migrate --prefix api && npm run seed --prefix api`.
 
-**Cross-origin cookies:** when the web app and API live on different sites (Vercel + Render), the refresh cookie must be `SameSite=None; Secure`. This is the production default; the web app already sends `credentials: 'include'` (set `COOKIE_SAMESITE=none` explicitly if you override it). Both origins must be HTTPS.
+**Serverless notes:** use Supabase's **transaction pooler** connection string (port `6543`) for `DATABASE_URL` so many function instances share a bounded set of connections. Vercel caps request bodies at **4.5 MB**, so the API rejects uploads over 4 MB and the web client compresses photos to JPEG before uploading.
 
-**Storage:** create a **private** bucket named `complaint-images` in Supabase and set `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` on Render. Without them, images are stored on the (ephemeral) Render disk — fine for demos, not for production.
+**Cross-origin cookies:** when the web app and API live on different sites (web + API on separate Vercel domains), the refresh cookie must be `SameSite=None; Secure`. This is the production default; the web app already sends `credentials: 'include'` (set `COOKIE_SAMESITE=none` explicitly if you override it). Both origins must be HTTPS.
+
+**Storage:** create a **private** bucket named `complaint-images` in Supabase and set `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` on the API project. Without them, images are written to the (ephemeral) local disk — fine for local demos, not for production.
 
 ### Production checklist
 
@@ -174,7 +175,7 @@ Then run the seed once from the Render shell (or leave it to a first deploy): `n
 - [ ] `ADMIN_PASSWORD` is not the default `admin1234`.
 - [ ] `CORS_ORIGINS` lists only your real web origin(s).
 - [ ] Supabase Storage configured with a private bucket (images survive restarts).
-- [ ] `NODE_ENV=production`, `TRUST_PROXY=1`, `COOKIE_SAMESITE=none` on Render.
+- [ ] `NODE_ENV=production`, `TRUST_PROXY=1`, `COOKIE_SAMESITE=none` on the API project.
 - [ ] `VITE_API_BASE_URL` points at the deployed API.
 - [ ] `/healthz` and `/readyz` both return `{ "ok": true }`.
 
