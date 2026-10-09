@@ -67,9 +67,10 @@ One platform, two experiences:
 
 ## Try it
 
-- **Live app:** _add Vercel URL_
-- **API:** _add Render URL_ (`/healthz`)
-- **Demo video:** _add link_
+- **Source code:** https://github.com/sunaad7/civic-lens
+- **Live app:** _deployment in progress (Vercel)_
+- **API health:** _deployment in progress (Render)_
+- **Demo video:** _coming soon_
 - **Admin demo:** seeded admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`
 
 Local setup is in [README.md](./README.md#local-development).

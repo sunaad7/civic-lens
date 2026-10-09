@@ -2,7 +2,7 @@ services:
   - type: web
     name: civic-lens-api
     runtime: node
-    root: api
+    rootDir: api
     # --include=dev so tsc + tsx (migrations) are available despite NODE_ENV=production
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run migrate && npm start
