@@ -2,9 +2,10 @@ import path from 'node:path'
 import compression from 'compression'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
-import express from 'express'
-import rateLimit from 'express-rate-limit'
-import helmet from 'helmet'
+import express, { type RequestHandler } from 'express'
+import { rateLimit } from 'express-rate-limit'
+import * as helmetNS from 'helmet'
+import type { HelmetOptions } from 'helmet'
 import { sql } from 'kysely'
 import { config } from './config.js'
 import { db } from './db/client.js'
@@ -13,6 +14,15 @@ import adminRoutes from './modules/admin/routes.js'
 import authRoutes from './modules/auth/routes.js'
 import complaintRoutes from './modules/complaints/routes.js'
 import { storageMode } from './lib/storage.js'
+
+// Vercel's backend type-check (@vercel/backends `doTypeCheck`) resolves dual
+// ESM/CJS packages without the ESM default synthetic, so `import helmet from
+// 'helmet'` fails there even though `tsc` passes locally. Unwrap the namespace's
+// `.default` so the factory stays callable under every `moduleResolution`.
+// Ref: helmetjs/helmet#441
+const helmet: (options?: Readonly<HelmetOptions>) => RequestHandler =
+  (helmetNS as { default?: (options?: Readonly<HelmetOptions>) => RequestHandler }).default ??
+  (helmetNS as unknown as (options?: Readonly<HelmetOptions>) => RequestHandler)
 
 const isTest = config.NODE_ENV === 'test'
 
