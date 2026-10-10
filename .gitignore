@@ -15,3 +15,5 @@ api/uploads/
 .vite/
 .turbo/
 .vercel/
+.vercel
+.env*

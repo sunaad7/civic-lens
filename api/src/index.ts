@@ -1,10 +1,8 @@
 import type { Server } from 'node:http'
-import { createApp } from './app.js'
+import app from './app.js'
 import { config } from './config.js'
 import { closeDb } from './db/client.js'
 import { logger } from './lib/logger.js'
-
-const app = createApp()
 
 // On Vercel the exported app is invoked as a serverless function, so we must not
 // start a long-lived listener. Local dev and self-hosted runs (Docker, Render,

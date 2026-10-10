@@ -124,3 +124,10 @@ export function createApp(): express.Express {
 
   return app
 }
+
+// Vercel's zero-config Express detection uses `src/app.ts` as the function
+// entry, so it must expose a default export that is a request handler.
+// index.ts reuses this same instance for local/self-hosted listening.
+export const app = createApp()
+
+export default app
