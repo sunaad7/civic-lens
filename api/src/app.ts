@@ -17,12 +17,30 @@ import { storageMode } from './lib/storage.js'
 
 // Vercel's backend type-check (@vercel/backends `doTypeCheck`) resolves dual
 // ESM/CJS packages without the ESM default synthetic, so `import helmet from
-// 'helmet'` fails there even though `tsc` passes locally. Unwrap the namespace's
-// `.default` so the factory stays callable under every `moduleResolution`.
+// 'helmet'` fails there even though `tsc` passes locally. And at runtime the
+// CJS build's `exports.default` is the whole exports object, so `helmetNS.default`
+// is not the callable either. Unwrap `.default` until we hit a function and keep
+// an explicit fallback so whichever way the module resolves we stay callable.
 // Ref: helmetjs/helmet#441
-const helmet: (options?: Readonly<HelmetOptions>) => RequestHandler =
-  (helmetNS as unknown as { default?: (options?: Readonly<HelmetOptions>) => RequestHandler }).default ??
-  (helmetNS as unknown as (options?: Readonly<HelmetOptions>) => RequestHandler)
+type HelmetFactory = (options?: Readonly<HelmetOptions>) => RequestHandler
+
+const helmetModule = helmetNS as unknown as { default?: unknown }
+const helmetDefault = helmetModule.default
+const helmetCandidate: HelmetFactory | undefined =
+  typeof helmetDefault === 'function'
+    ? (helmetDefault as HelmetFactory)
+    : helmetDefault !== null &&
+        typeof helmetDefault === 'object' &&
+        'default' in helmetDefault &&
+        typeof (helmetDefault as { default?: unknown }).default === 'function'
+      ? ((helmetDefault as { default?: unknown }).default as HelmetFactory)
+      : undefined
+
+const helmet: HelmetFactory = helmetCandidate ?? (helmetNS as unknown as HelmetFactory)
+
+if (typeof helmet !== 'function') {
+  throw new Error('[helmet-interop] Failed to resolve the helmet middleware factory at runtime')
+}
 
 const isTest = config.NODE_ENV === 'test'
 
