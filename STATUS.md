@@ -53,7 +53,7 @@ Ran the **Aceternity UI skill** and rebuilt the public face of the app:
 
 ## Vercel migration (this session)
 
-- Moved the API off Render onto Vercel as a **second project** (`api`, root directory `api`, zero-config Express): `api/src/index.ts` now `export default app` and only starts a listener when `!process.env.VERCEL`.
+- Moved the API off Render onto Vercel as a **second project** (`api`, root directory `api`, zero-config Express): `api/src/app.ts` exports the Express app as its default (Vercel's function entry) and `api/src/index.ts` imports it, only starting a listener when `!process.env.VERCEL`. `helmet` / `express-rate-limit` are imported resolution-agnostically so Vercel's own type-check and module loader both resolve them.
 - Serverless-safe `pg` pool (`DB_POOL_MAX`, default 3) and pool timeouts; use Supabase transaction pooler (port 6543) for `DATABASE_URL`.
 - Enforced Vercel's 4.5 MB body limit: API caps total image upload at 4 MB; the web client compresses photos to JPEG (`web/src/lib/image.ts`) with a live size guard in `ReportPage`.
 - Removed `render.yaml`; updated README/SUBMISSION deploy docs.
@@ -61,8 +61,8 @@ Ran the **Aceternity UI skill** and rebuilt the public face of the app:
 
 ## Remaining (user actions)
 
-1. **Rotate secrets** — Supabase DB password + `sb_secret_` service-role key were pasted in chat; rotate both, then update `api/.env` and re-run a migrate sanity check.
-2. **Deploy** — create the `civic-lens-api` Vercel project (root `api`), set env vars, wire the frontend's `VITE_API_BASE_URL`, then verify sign-in end to end.
+1. **Rotate credentials** — rotate the Supabase DB password, the service-role key, and the JWT secrets that were shared during development, then update `api/.env` and the Vercel project env vars and re-run a migrate sanity check.
+2. **Deployed** — both Vercel projects are live: web `https://civic-lens-sunaad7.vercel.app`, API `https://civic-lens-api.vercel.app` (`/healthz`, `/readyz`, and admin sign-in verified end to end).
 3. Optional: Supabase free-tier projects pause after ~7 days idle (local dev/tests unaffected — they run on Homebrew PostgreSQL 17, port 5433).
 
 ## Key files
