@@ -21,7 +21,7 @@ import { storageMode } from './lib/storage.js'
 // `.default` so the factory stays callable under every `moduleResolution`.
 // Ref: helmetjs/helmet#441
 const helmet: (options?: Readonly<HelmetOptions>) => RequestHandler =
-  (helmetNS as { default?: (options?: Readonly<HelmetOptions>) => RequestHandler }).default ??
+  (helmetNS as unknown as { default?: (options?: Readonly<HelmetOptions>) => RequestHandler }).default ??
   (helmetNS as unknown as (options?: Readonly<HelmetOptions>) => RequestHandler)
 
 const isTest = config.NODE_ENV === 'test'
