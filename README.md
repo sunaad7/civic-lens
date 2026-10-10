@@ -2,6 +2,8 @@
 
 A civic complaint platform: citizens report local issues (with photos, a map pin, and voice dictation), an AI triage step categorizes and prioritizes each report, and an admin console manages the queue and drafts official response letters.
 
+> **Live:** https://civic-lens-sunaad7.vercel.app · **API:** https://civic-lens-api.vercel.app · [health](https://civic-lens-api.vercel.app/healthz)
+
 ```
 ┌──────────────────────────┐
 │  React + Vite (Vercel)   │
@@ -157,13 +159,20 @@ Triage runs inline when a complaint is created; the letter is generated on first
 
 ## Deployment
 
-Both apps deploy to Vercel as **two projects** from this one repo. The API runs as a serverless function (Express is auto-detected via `api/src/index.ts`); the same entry still starts a long-lived listener with graceful shutdown when run locally, in Docker, or on any Node host.
+Both apps deploy to Vercel as **two projects** from this one repo.
+
+| App | Live URL | Vercel project | Root directory |
+|-----|----------|----------------|----------------|
+| Web SPA | https://civic-lens-sunaad7.vercel.app | `civic-lens` | `web` |
+| API | https://civic-lens-api.vercel.app | `civic-lens-api` | `api` |
+
+The API runs as a serverless function — Vercel's Node/Express runtime uses `api/src/app.ts` as the function entry, which default-exports the Express app; `api/src/index.ts` imports that same instance and adds the long-lived listener + graceful shutdown when it isn't running on Vercel (local, Docker, or any Node host).
 
 **Web → Vercel:** new project with **root directory `web`** (build `npm run build`, output `dist`). `web/vercel.json` provides SPA rewrites plus security and asset-cache headers. Set `VITE_API_BASE_URL` to the deployed API URL including the `/api` suffix (e.g. `https://civic-lens-api.vercel.app/api`); the default `/api` requires a same-origin rewrite/proxy.
 
-**API → Vercel:** new project with **root directory `api`** (no build command needed — Vercel builds the Express app automatically). Set the environment variables below, including `CORS_ORIGINS` (exact web origin, e.g. `https://civic-lens.vercel.app`, no trailing slash, comma-separated for multiple) and `API_PUBLIC_URL` (the API's own URL). Run migrations and the seed **locally** against the same `DATABASE_URL` before/after deploy: `npm run migrate --prefix api && npm run seed --prefix api`.
+**API → Vercel:** new project with **root directory `api`** (no build command needed — Vercel builds the Express app automatically). Set the environment variables below, including `CORS_ORIGINS` (exact web origin, e.g. `https://civic-lens-sunaad7.vercel.app`, no trailing slash, comma-separated for multiple) and `API_PUBLIC_URL` (the API's own URL). Run migrations and the seed **locally** against the same `DATABASE_URL` before/after deploy: `npm run migrate --prefix api && npm run seed --prefix api`.
 
-**Serverless notes:** use Supabase's **transaction pooler** connection string (port `6543`) for `DATABASE_URL` so many function instances share a bounded set of connections. Vercel caps request bodies at **4.5 MB**, so the API rejects uploads over 4 MB and the web client compresses photos to JPEG before uploading.
+**Serverless notes:** use Supabase's **transaction pooler** connection string (port `6543`) for `DATABASE_URL` so many function instances share a bounded set of connections. Vercel caps request bodies at **4.5 MB**, so the API rejects uploads over 4 MB and the web client compresses photos to JPEG before uploading. Vercel also runs its own TypeScript check and module loader on the API function, so `helmet` and `express-rate-limit` are imported in a resolution-agnostic way in `api/src/app.ts` (named import for the rate limiter; a namespace unwrap for helmet's factory) to satisfy both the build-time type-check and the runtime interop.
 
 **Cross-origin cookies:** when the web app and API live on different sites (web + API on separate Vercel domains), the refresh cookie must be `SameSite=None; Secure`. This is the production default; the web app already sends `credentials: 'include'` (set `COOKIE_SAMESITE=none` explicitly if you override it). Both origins must be HTTPS.
 

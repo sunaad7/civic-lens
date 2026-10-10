@@ -68,10 +68,12 @@ One platform, two experiences:
 ## Try it
 
 - **Source code:** https://github.com/sunaad7/civic-lens
-- **Live app:** _deployment in progress (Vercel)_
-- **API health:** _deployment in progress (Vercel)_
+- **Live app:** https://civic-lens-sunaad7.vercel.app
+- **Live API:** https://civic-lens-api.vercel.app — health: [`/healthz`](https://civic-lens-api.vercel.app/healthz), readiness: [`/readyz`](https://civic-lens-api.vercel.app/readyz)
 - **Demo video:** _coming soon_
-- **Admin demo:** seeded admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+- **Admin demo:** sign in on the live app with the seeded admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`admin@civiclens.local` / `admin1234` by default)
+
+Deployed as two Vercel projects from one repo — the web SPA (`root directory: web`) talks to the serverless Express API (`root directory: api`) over credentialed CORS.
 
 Local setup is in [README.md](./README.md#local-development).
 
